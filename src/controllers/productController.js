@@ -730,7 +730,7 @@ function autoUpdateProducts() {
   }, 2 * 1000);  
 }
 
-// autoUpdateProducts();
+autoUpdateProducts();
 
 
 ///////********Update Product Status**********///////

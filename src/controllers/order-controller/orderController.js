@@ -412,7 +412,7 @@ const updateAssignedOrders = async () => {
 
 
 // setInterval(updateAssignedOrders, 30 * 1000);
-// setInterval(updateAssignedOrders, 30 * 1000);
+setInterval(updateAssignedOrders, 30 * 1000);
 
 // Function to fetch orders requested by lower hierarchy roles
 exports.getOrdersBySubordinates = async (req, res) => {
