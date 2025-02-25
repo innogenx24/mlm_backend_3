@@ -825,16 +825,16 @@ exports.getLowHierarchySalesDetails = async (req, res) => {
 
           switch (role) {
             case "Super Distributor":
-              price = product.sdPrice || 0;
-              break;
-            case "Distributor":
               price = product.distributorPrice || 0;
               break;
+            case "Distributor":
+              price = product.price || 0;
+              break;
             case "Master Distributor":
-              price = product.mdPrice || 0;
+              price = product.sdPrice || 0;
               break;
             case "Area Development Officer":
-              price = product.adoPrice || 0;
+              price = product.mdPrice || 0;
               break;
           }
 
