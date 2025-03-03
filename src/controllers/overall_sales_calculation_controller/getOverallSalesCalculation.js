@@ -378,8 +378,12 @@ exports.getOverallSalesCalculation = async (req, res) => {
       let pendingAmount = Math.max(0, targetAmount - totalSalesAmount);
       let pendingStock = Math.max(0, targetStock - totalStockAchieved);
 
+      // let salesAchievementPercent = targetAmount
+      //   ? ((totalSalesAmount / targetAmount) * 100).toFixed(2)
+      //   : 0;
+
       let salesAchievementPercent = targetAmount
-        ? ((totalSalesAmount / targetAmount) * 100).toFixed(2)
+        ? Math.min(((totalSalesAmount / targetAmount) * 100).toFixed(2), 100)
         : 0;
 
       let stockAchievementPercent = targetStock
@@ -1260,80 +1264,82 @@ exports.getStockTargetDetails = async (req, res) => {
     let result = [];
 
     if (USER_ROLE_NAME === "Admin") {
-        // ✅ **Fetch all ADO users in one query**
-        const adoUsers = await User.findAll({
-          where: { role_name: "Area Development Officer" },
-          attributes: ["id"], // Fetch only IDs
-        });
-        const adoIds = adoUsers.map((user) => user.id);
-  
-        // ✅ **Fetch ADO stock target once**
-        const totalAdoStockTarget = await SalesStockTarget.findOne({
-          where: { role_name: "Area Development Officer" },
-          attributes: ["stock_target"],
-        });
-  
-        const totalTargetStock = adoUsers.length * (totalAdoStockTarget?.stock_target || 0);
-  
-        // ✅ **Loop through each month and fetch orders**
-        for (const month of months) {
-          const monthStart = new Date(`${month}-01`);
-          const monthEnd = new Date(new Date(`${month}-01`).setMonth(monthStart.getMonth() + 1));
-  
-          // ✅ **Fetch all accepted orders for ADO users in the given month**
-          const adoOrders = await Order.findAll({
-            where: {
-              user_id: adoIds,
-              status: "Accepted",
-              updatedAt: { [Op.gte]: monthStart, [Op.lt]: monthEnd },
+      // ✅ **Fetch all ADO users in one query**
+      const adoUsers = await User.findAll({
+        where: { role_name: "Area Development Officer" },
+        attributes: ["id"], // Fetch only IDs
+      });
+      const adoIds = adoUsers.map((user) => user.id);
+
+      // ✅ **Fetch ADO stock target once**
+      const totalAdoStockTarget = await SalesStockTarget.findOne({
+        where: { role_name: "Area Development Officer" },
+        attributes: ["stock_target"],
+      });
+
+      const totalTargetStock =
+        adoUsers.length * (totalAdoStockTarget?.stock_target || 0);
+
+      // ✅ **Loop through each month and fetch orders**
+      for (const month of months) {
+        const monthStart = new Date(`${month}-01`);
+        const monthEnd = new Date(
+          new Date(`${month}-01`).setMonth(monthStart.getMonth() + 1)
+        );
+
+        // ✅ **Fetch all accepted orders for ADO users in the given month**
+        const adoOrders = await Order.findAll({
+          where: {
+            user_id: adoIds,
+            status: "Accepted",
+            updatedAt: { [Op.gte]: monthStart, [Op.lt]: monthEnd },
+          },
+          include: [
+            {
+              model: OrderItem,
+              as: "OrderItems",
+              include: {
+                model: Product,
+                as: "product",
+                attributes: ["sdPrice"], // Fetch only price
+              },
             },
-            include: [
-              {
-                model: OrderItem,
-                as: "OrderItems",
-                include: {
-                  model: Product,
-                  as: "product",
-                  attributes: ["sdPrice"], // Fetch only price
-                },
-              },
-            ],
+          ],
+        });
+
+        let totalSoldStock = 0;
+        let totalSoldStockAmount = 0;
+
+        // ✅ **Calculate sold stock and amount**
+        adoOrders.forEach((order) => {
+          order.OrderItems.forEach((orderItem) => {
+            const price = orderItem.product?.sdPrice || 0;
+            const quantity = parseInt(orderItem.quantity) || 0;
+            totalSoldStock += quantity;
+            totalSoldStockAmount += quantity * price;
           });
-  
-          let totalSoldStock = 0;
-          let totalSoldStockAmount = 0;
-  
-          // ✅ **Calculate sold stock and amount**
-          adoOrders.forEach((order) => {
-            order.OrderItems.forEach((orderItem) => {
-              const price = orderItem.product?.sdPrice || 0;
-              const quantity = parseInt(orderItem.quantity) || 0;
-              totalSoldStock += quantity;
-              totalSoldStockAmount += quantity * price;
-            });
-          });
-  
-          // ✅ **Calculate total sales amount for logged-in user in the given month**
-          const loginUsertotalSales =
-            (await Order.sum("total_amount", {
-              where: {
-                higher_role_id: 1,
-                status: "Accepted",
-                updatedAt: { [Op.between]: [monthStart, monthEnd] },
-              },
-            })) || 0;
-  
-          // ✅ **Store results for each month**
-          result.push({
-            month,
-            totalTargetStock,
-            totalSoldStock,
-            totalSoldStockAmount:loginUsertotalSales,
-            // Added total sales for the logged-in user
-          });
-        
-       }
-       } else {
+        });
+
+        // ✅ **Calculate total sales amount for logged-in user in the given month**
+        const loginUsertotalSales =
+          (await Order.sum("total_amount", {
+            where: {
+              higher_role_id: 1,
+              status: "Accepted",
+              updatedAt: { [Op.between]: [monthStart, monthEnd] },
+            },
+          })) || 0;
+
+        // ✅ **Store results for each month**
+        result.push({
+          month,
+          totalTargetStock,
+          totalSoldStock,
+          totalSoldStockAmount: loginUsertotalSales,
+          // Added total sales for the logged-in user
+        });
+      }
+    } else {
       // ✅ **Fetch user-specific stock target once**
       const userTarget = await SalesStockTarget.findOne({
         where: { role_name: USER_ROLE_NAME },
@@ -1450,43 +1456,6 @@ exports.getStockTargetDetails = async (req, res) => {
     });
   }
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // // const { Order, Product, OrderItem, User, SalesStockTarget } = require('../../../models');
 // // const { Op } = require('sequelize');
@@ -1958,7 +1927,6 @@ exports.getStockTargetDetails = async (req, res) => {
 //       directRoles = directRoles.filter(role => role !== 'Area Development Officer');
 //     }
 
-
 //     for (const role of directRoles) {
 //       const users = await User.findAll({
 //         where: { superior_id: Distributor_ROLE_ID, role_name: role },
@@ -2025,7 +1993,7 @@ exports.getStockTargetDetails = async (req, res) => {
 //       }
 
 //       let customerBuyedAmmount = 0;
-      
+
 //       if (role === "Customer") {
 //         const customers = await User.findAll({
 //           where: { superior_id: Distributor_ROLE_ID, role_name: "Customer" },
@@ -2581,7 +2549,6 @@ exports.getStockTargetDetails = async (req, res) => {
 //     }
 
 //     let result = [];
-    
 
 //     if (USER_ROLE_NAME === "Admin") {
 //       // ✅ **Fetch all ADO users in one query**
@@ -2599,7 +2566,6 @@ exports.getStockTargetDetails = async (req, res) => {
 
 //       const totalTargetStock = adoUsers.length * (totalAdoStockTarget?.stock_target || 0);
 
-      
 //       // ✅ **Fetch orders in bulk for all months**
 //       for (const month of months) {
 //         const adoOrders = await Order.findAll({
@@ -2662,7 +2628,7 @@ exports.getStockTargetDetails = async (req, res) => {
 //             `https://erp.keramruth.com/api/user_sales_detail/sales_achievementWeb/${USER_ROLE_NAME}/${USER_ID}?month=${monthNum}&year=${year}`
 //           );
 
-//           return { 
+//           return {
 //             [`${year}-${monthNum}`]: {
 //               StockAchievement: response.data?.monthlyDetails?.StockAchievement || 0,
 //               StockTarget: response.data?.monthlyDetails?.StockTarget || 0,
@@ -2671,7 +2637,6 @@ exports.getStockTargetDetails = async (req, res) => {
 //               pendingAmount: response.data?.monthlyDetails?.pendingAmount || 0,
 //               AchievementAmount: response.data?.monthlyDetails?.AchievementAmount || 0
 
-              
 //             }
 //           };
 
@@ -2682,7 +2647,6 @@ exports.getStockTargetDetails = async (req, res) => {
 //       });
 
 //       const stockAchievements = Object.assign({}, ...(await Promise.all(stockAchievementRequests)));
-
 
 //       // ✅ **Fetch user orders in bulk**
 //       for (const month of months) {
